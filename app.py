@@ -1,9 +1,10 @@
 import datetime
+from functools import wraps
 import hashlib
 from bson import ObjectId
 from pymongo import MongoClient
 import json
-from flask import Flask, jsonify, request
+from flask import Flask, abort, jsonify, request
 from flask_cors import CORS
 from datetime import datetime, timedelta
 import jwt
@@ -18,8 +19,30 @@ client = MongoClient('localhost', 27017)
 db = client.dbturtle
 
 
+def authorize(f):
+    # 랩스 또한 임포트 해준다. (한 함수를 여러곳에 사용하기 위해서)
+    @wraps(f)
+    def decorated_function():
+        # Authorization 인지 확인을 하고, Authorization이아니라면 에러를냄.
+        if not 'Authorization' in request.headers:
+            abort(401)
+        # Authorization이 헤더에 있었다면 토큰값을 헤더에서 꺼내온다.
+        token = request.headers['Authorization']
+        # 디코드가 아니면 어볼트 오류를 낸다.
+        try:
+            user = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        except:
+            abort(401)
+        # 이러한값을 펑션안에 넣어 보여주면
+        return f(user)
+    # 완성
+    return decorated_function
+
+
 @app.route('/')
-def hello_world():
+@authorize
+def hello_world(user):
+    print(user)
     return jsonify({'message': 'success'})
 
 
@@ -76,15 +99,38 @@ def sign_in():
 
 
 @app.route("/getuserinfo", methods=["GET"])
-def get_user_info():
-    # print("1.", request.headers) #header hidden
-    token = request.headers.get("Authorization")
-    print("2.", token)
-    user = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-    print("3.", user)
+@authorize
+def get_user_info(user):
+    # print("1.", request.headers)  # header hidden
+    # token = request.headers.get("Authorization")
+    # print("2.", token)
+    # user = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+    # print("3.", user)
     result = db.user.find_one({'_id': ObjectId(user["id"])})
-    print("4.", result)
+    # print("4.", result)
     return jsonify({"message": "success", "email": result['email']})
+
+
+@app.route("/article", methods=["POST"])
+@authorize
+def post_article(user):
+    data = json.loads(request.data)
+    # 유저의 아이디값을 가져온다.
+    db_user = db.user.find_one({'_id': ObjectId(user.get('id'))})
+    # 현재 시간을 가져온다.
+    now = datetime.now().strftime("%Y-%m-%d")
+    doc = {
+        'title': data.get('title', None),
+        'content': data.get('content', None),
+        'user': user['id'],
+        'user_email': db_user('email'),
+        'time': now
+    }
+    print(doc)
+
+    db.article.insert_one(doc)
+
+    return jsonify({"message": "success"})
 
 
 if __name__ == '__main__':
