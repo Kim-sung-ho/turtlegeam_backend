@@ -18,6 +18,8 @@ cors = CORS(app, resources={r"*": {"origins": "*"}})
 client = MongoClient('localhost', 27017)
 db = client.dbturtle
 
+# 인증을 확인하는 함수
+
 
 def authorize(f):
     # 랩스 또한 임포트 해준다. (한 함수를 여러곳에 사용하기 위해서)
@@ -42,7 +44,6 @@ def authorize(f):
 @app.route('/')
 @authorize
 def hello_world(user):
-    print(user)
     return jsonify({'message': 'success'})
 
 
@@ -62,7 +63,7 @@ def sign_up():
     exists = bool(db.user.find_one({"email": data['email']}))
     if not exists:
         doc = {
-            'email': data['email'],  # data.get('email')
+            'email': data.get['email'],  # data.get('email'),
             'password': password_hash
         }
         db.user.insert_one(doc)
@@ -110,20 +111,23 @@ def get_user_info(user):
     # print("4.", result)
     return jsonify({"message": "success", "email": result['email']})
 
+# 게시글 작성을하기위한
+
 
 @app.route("/article", methods=["POST"])
-@authorize
+@authorize  # 인증이 된사람을 판별
 def post_article(user):
     data = json.loads(request.data)
-    # 유저의 아이디값을 가져온다.
+    # 포스트맨에서 데이터 테스트 print(data)
+    # 유저의 아이디값을 가져온다, 유저의이메일 값을 가져온다.
     db_user = db.user.find_one({'_id': ObjectId(user.get('id'))})
     # 현재 시간을 가져온다.
-    now = datetime.now().strftime("%Y-%m-%d")
+    now = datetime.now().strftime("%H-%M-%S")
     doc = {
         'title': data.get('title', None),
         'content': data.get('content', None),
         'user': user['id'],
-        'user_email': db_user('email'),
+        'user_email': db_user['email'],
         'time': now
     }
     print(doc)
@@ -131,6 +135,17 @@ def post_article(user):
     db.article.insert_one(doc)
 
     return jsonify({"message": "success"})
+
+
+@app.route("/article", methods=["GET"])
+def get_article():
+    # 리스트로 아티클을 다가져와서
+    articles = list(db.article.find())
+    print(articles)
+    for article in articles:
+        print(article.get("title"))
+        article["_id"] = str(article["_id"])
+    return jsonify({"message": "success", "articles": articles})
 
 
 if __name__ == '__main__':
